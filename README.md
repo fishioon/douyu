@@ -1,5 +1,5 @@
 # douyu
-g++ client.cc danmu.cc -o douyu
+g++ client.cc danmu.cc -o douyu  
 ./douyu 58428
 
 获取douyu弹幕，详情见:
