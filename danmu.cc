@@ -1,102 +1,44 @@
-#include <stdlib.h>
+#include "client.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <string>
 
-#define BUFFER_SIZE 1024
-#define DANMU_PORT  8601
-#define DANMU_IP    "125.88.176.8"
-#define USERNAME    "username"
-#define PASSWORD    "passwd"
-
-struct MsgInfo {
-    int len;
-    int code;
-    int magic;
-    char content[BUFFER_SIZE];
-};
-
-int sock_conn(int port, const char* addr) {
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in servaddr;
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(port);
-    servaddr.sin_addr.s_addr = inet_addr(addr);
-
-    if (connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) < 0) {
-        fprintf(stderr, "connect socket failed, port:%d, addr:%s\n", port, addr);
-        return -1;
+int MsgHandle(void * /*arg*/, void *msg) {
+  char *s = (char *)msg;
+  char *p, *q;
+  if (strncmp(s, "type@=chatmsg", 13) == 0) {
+    p = strstr(s, "nn@=");
+    if (p) {
+      p += 4;
+      q = strchr(p, '/');
+      *q = 0;
+      printf("<%s>:", p);
+      p = strstr(q + 1, "txt@=");
+      if (p) {
+        p += 5;
+        q = strchr(p, '/');
+        *q = 0;
+        printf(" %s\n", p);
+      }
     }
-    return sockfd;
+  }
+  return 0;
 }
 
-int sock_close(int sockfd) {
-    close(sockfd);
+int main(int argc, char *argv[]) {
+  if (argc < 2) {
+    printf("%s\n", "invalid argv");
     return 0;
-}
-
-int process_danmu(int msg_len, MsgInfo* msg) {
-    if (msg_len <= 12 || msg->len <= 8) {
-        printf("msg_len:%d\n", msg_len);
-        return -1;
-    }
-    char* p = strstr(msg->content, "content@=");
-    if (!p) return -1;
-    char* content = p + sizeof("content@=")-1;
-    p = strchr(content, '/');
-    if (!p) return -1;
-    *p++ = 0;
-    char* snick = p + sizeof("snick@=")-1;
-    p = strchr(snick, '/');
-    if (!p) return -1;
-    *p++ = 0;
-    printf("%s:\t%s\n", snick, content);
-    return 0;
-}
-
-int douyu_danmu(int sockfd, const char* username,
-        const char* passwd, int room_id, int group_id) {
-    MsgInfo msg;
-    int ct_len = snprintf(msg.content, sizeof(msg.content),
-            "type@=loginreq/username@%s=/password@=%s/roomid@=%d/ct@=2/",
-            username, passwd, room_id);
-    msg.len = ct_len + 1 + sizeof(msg.code) + sizeof(msg.magic);
-    msg.code = msg.len;
-    msg.magic = 0x2b1;
-    send(sockfd, &msg, msg.len+sizeof(msg.len), 0);
-    recv(sockfd, &msg, sizeof(msg), 0);
-    printf("recv:%s\n", msg.content);
-
-    ct_len = snprintf(msg.content, sizeof(msg.content),
-            "type@=joingroup/rid@=%d/gid@=%d/", room_id, group_id);
-    msg.len = ct_len + 1 + sizeof(msg.code) + sizeof(msg.magic);
-    msg.code = msg.len;
-    msg.magic = 0x2b1;
-    send(sockfd, &msg, msg.len+sizeof(msg.len), 0);
-    int ret = 0;
-    while (true) {
-        ret = recv(sockfd, &msg, sizeof(msg), 0);
-        if (process_danmu(ret, &msg) == -1) {
-            send(sockfd, &msg, 0, 0);
-        }
-    }
-    return 0;
-}
-
-int main(int argc, char** argv) {
-    if (argc < 2) {
-        printf("usage: danmu room_id group_id\n");
-        return 0;
-    }
-    const char* username = argc == 4 ? argv[3] : USERNAME;
-    const char* passwd = argc == 4 ? argv[4] : PASSWORD;
-    int room_id = atoi(argv[1]);
-    int group_id = atoi(argv[2]);
-    int sockfd = sock_conn(DANMU_PORT, DANMU_IP);
-    douyu_danmu(sockfd, username, passwd, room_id, group_id);
-    return 0;
+  }
+  int rid = atoi(argv[1]);
+  if (rid <= 10000) {
+    printf("invalid room id: %d\n", rid);
+    return -1;
+  }
+  Client client;
+  client.Connect("openbarrage.douyutv.com", 8601);
+  client.JoinRoom(rid);
+  client.Watch(MsgHandle, NULL);
+  return 0;
 }
