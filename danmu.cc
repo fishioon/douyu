@@ -12,9 +12,9 @@ int MsgHandle(void * /*arg*/, void *msg) {
     if (p) {
       p += 4;
       q = strchr(p, '/');
-      *q = 0;
+      *q++ = 0;
       printf("<%s>:", p);
-      p = strstr(q + 1, "txt@=");
+      p = strstr(q, "txt@=");
       if (p) {
         p += 5;
         q = strchr(p, '/');
