@@ -2,14 +2,6 @@
 #define DOUYU_CLIENT_H_
 
 #include <stdint.h>
-struct Msg {
-  uint32_t length;
-  uint32_t length2;
-  uint16_t msg_type;
-  uint8_t encrypt;
-  uint8_t reserve;
-  char data[0];
-};
 
 typedef int (*HandleFunc)(void *arg, void* msg);
 

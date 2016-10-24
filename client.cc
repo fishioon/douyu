@@ -12,16 +12,14 @@
 #include <time.h>
 #include <unistd.h>
 
-const int max_send_size = 256;
-const int max_recv_size = 40960;
-
-Msg *NewSendMsg() {
-  Msg *msg = (Msg *)malloc(sizeof(Msg) + 256);
-  msg->msg_type = 689;
-  msg->reserve = 0;
-  msg->encrypt = 0;
-  return msg;
-}
+struct Packet {
+  uint32_t length;
+  uint32_t length2;
+  uint16_t msg_type;
+  uint8_t encrypt;
+  uint8_t reserve;
+  char data[0];
+};
 
 Client::Client() {}
 
@@ -54,22 +52,21 @@ int Client::Connect(const char *host_addr, int port) {
 
 int Client::JoinRoom(int rid) {
   // login
-  Msg *msg = (Msg *)malloc(sizeof(Msg) + max_send_size);
-  Msg *recv_msg = (Msg *)malloc(sizeof(Msg) + max_recv_size);
+  Packet *msg = (Packet *)malloc(sizeof(Packet) + 256);
+  Packet *recv_msg = (Packet *)malloc(sizeof(Packet) + 1024);
   msg->msg_type = 689;
   msg->reserve = 0;
   msg->encrypt = 0;
 
-  int n = snprintf(msg->data, max_send_size, "type@=loginreq/");
+  int n = sprintf(msg->data, "type@=loginreq/");
   msg->length = n + 1 + 8;
   msg->length2 = msg->length;
   send(sockfd_, msg, msg->length + 4, 0);
-  recv(sockfd_, recv_msg, sizeof(Msg) + max_recv_size, 0);
+  recv(sockfd_, recv_msg, sizeof(Packet) + 1024, 0);
   printf("login res: %s\n", recv_msg->data);
 
   // join room
-  n = snprintf(msg->data, max_send_size, "type@=joingroup/rid@=%d/gid@=-9999/",
-               rid);
+  n = sprintf(msg->data, "type@=joingroup/rid@=%d/gid@=-9999/", rid);
   msg->length = n + 1 + 8;
   msg->length2 = msg->length;
   send(sockfd_, msg, msg->length + 4, 0);
@@ -88,35 +85,27 @@ void *KeepLive(void *arg) {
 int Client::Watch(HandleFunc handle, void *arg) {
   pthread_t tid;
   pthread_create(&tid, NULL, KeepLive, this);
-  int buf_len = sizeof(Msg) + max_recv_size;
-  char *buf = (char *)malloc(buf_len);
-  Msg *msg = (Msg *)buf;
 
-  uint32_t nread = 0;
+  const int max_data_len = 4096;
+  Packet *msg = (Packet *)malloc(sizeof(Packet)+max_data_len);
+
   while (true) {
-    int ret = recv(sockfd_, buf + nread, buf_len - nread, 0);
-    if (ret <= 0) {
-      break;
-    }
-    nread += ret;
-    if (nread == msg->length + 4) {
-      handle(arg, msg);
-      nread = 0;
-    }
+    recv(sockfd_, msg, sizeof(Packet), 0);
+    recv(sockfd_, msg->data, msg->length-12, 0);
+    handle(arg, msg->data);
   }
-  free(buf);
+  free(msg);
   return 0;
 }
 
 void Client::Heartbeat() {
-  Msg *msg = (Msg *)malloc(sizeof(Msg) + max_send_size);
+  Packet *msg = (Packet *)malloc(sizeof(Packet) + 100);
   msg->msg_type = 689;
   msg->reserve = 0;
   msg->encrypt = 0;
   while (true) {
     printf("heartbeat\n");
-    int n = snprintf(msg->data, max_send_size, "type@=keeplive/tick@=%d/",
-                     (int)time(NULL));
+    int n = sprintf(msg->data, "type@=keeplive/tick@=%d/", (int)time(NULL));
     msg->length = n + 1 + 8;
     msg->length2 = msg->length;
     send(sockfd_, msg, msg->length + 4, 0);

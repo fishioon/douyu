@@ -1,4 +1,4 @@
-CXXFLAGS=-O2
+CXXFLAGS=-O2 -std=c++11
 
 bin = douyu
 objs = danmu.o client.o
