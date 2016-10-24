@@ -15,15 +15,6 @@
 const int max_send_size = 256;
 const int max_recv_size = 40960;
 
-struct Msg {
-  uint32_t length;
-  uint32_t length2;
-  uint16_t msg_type;
-  uint8_t encrypt;
-  uint8_t reserve;
-  char data[0];
-};
-
 Msg *NewSendMsg() {
   Msg *msg = (Msg *)malloc(sizeof(Msg) + 256);
   msg->msg_type = 689;
@@ -97,14 +88,24 @@ void *KeepLive(void *arg) {
 int Client::Watch(HandleFunc handle, void *arg) {
   pthread_t tid;
   pthread_create(&tid, NULL, KeepLive, this);
-  Msg *recv_msg = (Msg *)malloc(sizeof(Msg) + max_recv_size);
-  int ret = 1;
-  while (ret > 0) {
-    ret = recv(sockfd_, recv_msg, sizeof(Msg) + max_recv_size, 0);
-    handle(arg, recv_msg->data);
+  int buf_len = sizeof(Msg) + max_recv_size;
+  char *buf = (char *)malloc(buf_len);
+  Msg *msg = (Msg *)buf;
+
+  uint32_t nread = 0;
+  while (true) {
+    int ret = recv(sockfd_, buf + nread, buf_len - nread, 0);
+    if (ret <= 0) {
+      break;
+    }
+    nread += ret;
+    if (nread == msg->length + 4) {
+      handle(arg, msg);
+      nread = 0;
+    }
   }
-  free(recv_msg);
-  return ret;
+  free(buf);
+  return 0;
 }
 
 void Client::Heartbeat() {

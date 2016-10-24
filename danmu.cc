@@ -5,7 +5,8 @@
 #include <string>
 
 int MsgHandle(void * /*arg*/, void *msg) {
-  char *s = (char *)msg;
+  Msg *m = (Msg*) msg;
+  char *s = m->data;
   char *p, *q;
   if (strncmp(s, "type@=chatmsg", 13) == 0) {
     p = strstr(s, "nn@=");
